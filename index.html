@@ -1,0 +1,278 @@
+<!DOCTYPE html>
+<html lang="ar">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>تطبيق المشتركين</title>
+    <style>
+        body {
+            font-family: 'Cairo', sans-serif;
+            direction: rtl;
+            text-align: right;
+            background-color: #f9f9f9;
+            padding: 20px;
+            position: relative;
+            min-height: 100vh; /* لضمان أن الصفحة تغطي كامل الشاشة */
+            padding-bottom: 30px; /* لضمان وجود مساحة أسفل الصفحة */
+        }
+
+        .container {
+            width: 850px;
+            margin: auto;
+            background-color: #fff;
+            padding: 25px;
+            border-radius: 10px;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
+        }
+
+        h2, h3 {
+            color: #333;
+        }
+
+        input, button, select, textarea {
+            margin: 10px 0;
+            padding: 12px;
+            width: 100%;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+            font-size: 14px;
+        }
+
+        button {
+            background-color: #28a745;
+            color: white;
+            border: none;
+            cursor: pointer;
+            transition: background-color 0.3s ease;
+        }
+
+            button:hover {
+                background-color: #218838;
+            }
+
+        .invoice {
+            padding: 15px;
+            border-bottom: 1px solid #ddd;
+            margin-bottom: 10px;
+            background-color: #fff;
+            border-radius: 5px;
+            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+        }
+
+        .paid {
+            background-color: #e0f8e9;
+        }
+
+        .delete-btn, .edit-btn {
+            padding: 8px 12px;
+            border-radius: 5px;
+            cursor: pointer;
+            margin-right: 5px;
+        }
+
+        .delete-btn {
+            background-color: #dc3545;
+            color: white;
+        }
+
+        .edit-btn {
+            background-color: #007bff;
+            color: white;
+        }
+
+        .author {
+            position: absolute;
+            bottom: 10px; /* لجعل النص في أسفل الصفحة */
+            left: 10px; /* تحديد الموقع على اليسار */
+            font-size: 16px;
+            color: #28a745; /* اللون الأخضر */
+            font-weight: bold; /* جعل النص عريض */
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h2>تطبيق المشتركين</h2>
+
+        <label>إضافة مشترك جديد:</label>
+        <input type="text" id="newClientName">
+        <button onclick="addClient()">إضافة مشترك</button>
+
+        <label>اختر المشترك:</label>
+        <select id="clientSelect" onchange="updateInvoices()"></select>
+ 
+
+        <label>سعر الاشتراك:</label>
+        <input type="number" id="subscriptionPrice">
+
+        <label>ملاحظة:</label>
+        <textarea id="invoiceNote"></textarea>
+
+        <button onclick="addInvoice()">إضافة فاتورة</button>
+
+        <h3>الفواتير:</h3>
+        <div id="invoicesList"></div>
+
+        <h3>الحساب الكلي:</h3>
+        <div id="totalAccount">0</div>
+    </div>
+
+    <!-- النص في أسفل الصفحة على اليسار -->
+    <div class="author">By Eng. Mohsen Alhssani</div>
+
+
+    <script>
+        let clientsDB = JSON.parse(localStorage.getItem('clientsDB')) || [];
+        let invoicesDB = JSON.parse(localStorage.getItem('invoicesDB')) || [];
+
+        function saveData() {
+            localStorage.setItem('clientsDB', JSON.stringify(clientsDB));
+            localStorage.setItem('invoicesDB', JSON.stringify(invoicesDB));
+        }
+
+        function addClient() {
+            const newClientName = document.getElementById('newClientName').value;
+            if (newClientName && !clientsDB.includes(newClientName)) {
+                clientsDB.push(newClientName);
+                updateClientSelect();
+                saveData();
+                document.getElementById('newClientName').value = '';
+            }
+        }
+        function deleteClient() {
+            const clientName = document.getElementById('clientSelect').value;
+            if (clientName) {
+                if (confirm(`هل أنت متأكد من حذف المشترك ${clientName}؟`)) {
+                    // حذف المشترك من clientsDB
+                    clientsDB = clientsDB.filter(client => client !== clientName);
+
+                    // حذف جميع الفواتير المتعلقة بالمشترك من invoicesDB
+                    invoicesDB = invoicesDB.filter(invoice => invoice.clientName !== clientName);
+
+                    // تحديث قائمة المشتركين والفواتير
+                    updateClientSelect();
+                    updateInvoices();
+                    updateTotalAccount(); // تحديث الحساب الكلي
+                    saveData(); // حفظ التغييرات في localStorage
+                }
+            } else {
+                alert('يرجى اختيار مشترك لحذفه.');
+            }
+        }
+
+        function updateClientSelect() {
+            const clientSelect = document.getElementById('clientSelect');
+            clientSelect.innerHTML = '';
+            clientsDB.forEach(client => {
+                const option = document.createElement('option');
+                option.value = client;
+                option.textContent = client;
+                clientSelect.appendChild(option);
+            });
+        }
+
+        function addInvoice() {
+            const clientName = document.getElementById('clientSelect').value;
+            const subscriptionPrice = parseFloat(document.getElementById('subscriptionPrice').value);
+            const note = document.getElementById('invoiceNote').value;
+            const date = new Date().toLocaleString();
+
+            if (clientName && subscriptionPrice) {
+                const invoice = {
+                    id: Date.now(),
+                    clientName: clientName,
+                    price: subscriptionPrice,
+                    date: date,
+                    status: 'unpaid',
+                    note: note
+                };
+                invoicesDB.push(invoice);
+                updateInvoices();
+                updateTotalAccount(); // تحديث الحساب الكلي بعد إضافة الفاتورة
+                saveData();
+            } else {
+                alert('يرجى اختيار المشترك وإدخال سعر الاشتراك');
+            }
+        }
+
+        function updateInvoices() {
+            const selectedClient = document.getElementById('clientSelect').value;
+            const invoicesList = document.getElementById('invoicesList');
+            invoicesList.innerHTML = '';
+            invoicesDB.filter(invoice => invoice.clientName === selectedClient).forEach(invoice => {
+                const div = document.createElement('div');
+                div.className = 'invoice' + (invoice.status === 'paid' ? ' paid' : '');
+                div.innerHTML = `
+                            <strong>المبلغ:</strong> ${invoice.price} |
+                            <strong>التاريخ:</strong> ${invoice.date}<br>
+                            <strong>ملاحظة:</strong> ${invoice.note}<br>
+                            ${invoice.status === 'paid' ? `<strong>تاريخ الدفع:</strong> ${invoice.paymentDate}<br>` : ''}
+                            <button onclick="togglePayment(${invoice.id})">${invoice.status === 'paid' ? 'إلغاء الدفع' : 'دفع'}</button>
+                            <button class="delete-btn" onclick="deleteInvoice(${invoice.id})">حذف</button>
+                            <button class="edit-btn" onclick="editNotePrompt(${invoice.id})">تعديل الملاحظة</button>
+                        `;
+                invoicesList.appendChild(div);
+            });
+            updateTotalAccount(); // تحديث الحساب الكلي بعد تغيير الفواتير
+        }
+
+        function togglePayment(id) {
+            invoicesDB.forEach(invoice => {
+                if (invoice.id === id) {
+                    if (invoice.status === 'paid') {
+                        invoice.status = 'unpaid';
+                        invoice.paymentDate = '';  // إزالة تاريخ الدفع عند إلغاء الدفع
+                        updateTotalAccountAfterPaymentChange(invoice.price, 'add'); // إعادة إضافة المبلغ للحساب الكلي
+                    } else {
+                        invoice.status = 'paid';
+                        invoice.paymentDate = new Date().toLocaleString();  // إضافة تاريخ الدفع
+                        updateTotalAccountAfterPaymentChange(invoice.price, 'subtract'); // خصم المبلغ من الحساب الكلي
+                    }
+                }
+            });
+            updateInvoices();
+            saveData();
+        }
+
+        function updateTotalAccountAfterPaymentChange(amount, action) {
+            const totalAccountElement = document.getElementById('totalAccount');
+            let totalAccount = parseFloat(totalAccountElement.textContent);
+
+            if (action === 'subtract') {
+                totalAccount -= amount;
+            } else if (action === 'add') {
+                totalAccount += amount;
+            }
+
+            totalAccountElement.textContent = totalAccount;
+        }
+
+        function deleteInvoice(id) {
+            invoicesDB = invoicesDB.filter(invoice => invoice.id !== id);
+            updateInvoices();
+            saveData();
+        }
+
+        function editNotePrompt(id) {
+            const note = prompt('أدخل الملاحظة الجديدة:');
+            if (note !== null) {
+                invoicesDB.find(inv => inv.id === id).note = note;
+                updateInvoices();
+                saveData();
+            }
+        }
+
+        function updateTotalAccount() {
+            const selectedClient = document.getElementById('clientSelect').value;
+            const totalAccount = invoicesDB
+                .filter(invoice => invoice.clientName === selectedClient)
+                .reduce((total, invoice) => total + (invoice.status === 'paid' ? 0 : invoice.price), 0); // جمع جميع الفواتير غير المدفوعة
+
+            document.getElementById('totalAccount').textContent = totalAccount;
+        }
+
+        updateClientSelect();
+        updateInvoices();
+    </script>
+</body>
+</html>
