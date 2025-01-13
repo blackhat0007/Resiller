@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Qإدارة المشتركين والفواتير</title>
+    <title>تطبيق المشتركين</title>
     <style>
         body {
             font-family: 'Cairo', sans-serif;
@@ -42,14 +42,33 @@
             background-color: #218838;
         }
     </style>
-    <script type="module">
-        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.1.0/firebase-app.js";
-        import { getDatabase, ref, set, push, get, child, update, remove } from "https://www.gstatic.com/firebasejs/11.1.0/firebase-database.js";
+</head>
+<body>
+    <div class="container">
+        <h2>إدارة المشتركين والفواتير</h2>
 
+        <label>إضافة مشترك جديد:</label>
+        <input type="text" id="newClientName" placeholder="اسم المشترك">
+        <button onclick="addClient()">إضافة مشترك</button>
+
+        <label>اختر المشترك:</label>
+        <select id="clientSelect"></select>
+        <button onclick="deleteClient()">حذف مشترك</button>
+
+        <h3>المشتركين:</h3>
+        <div id="clientsList"></div>
+    </div>
+
+    <script type="module">
+        // استيراد Firebase SDK
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.1.0/firebase-app.js";
+        import { getDatabase, ref, push, set, onValue, remove } from "https://www.gstatic.com/firebasejs/11.1.0/firebase-database.js";
+
+        // إعداد Firebase
         const firebaseConfig = {
             apiKey: "AIzaSyBLozqHT0vU9_E9nX5SMHeK80akAwYcP5w",
             authDomain: "resiller-a9868.firebaseapp.com",
-            databaseURL: "https://resiller-a9868-default-rtdb.firebaseio.com/",
+            databaseURL: "https://resiller-a9868-default-rtdb.firebaseio.com",
             projectId: "resiller-a9868",
             storageBucket: "resiller-a9868.appspot.com",
             messagingSenderId: "984544326620",
@@ -57,182 +76,61 @@
         };
 
         const app = initializeApp(firebaseConfig);
-        const db = getDatabase(app);
-        const clientsRef = ref(db, 'clients');
-        const invoicesRef = ref(db, 'invoices');
+        const database = getDatabase(app);
 
-        async function loadClients() {
-            const snapshot = await get(clientsRef);
-            if (snapshot.exists()) {
-                const data = snapshot.val();
-                updateClientSelect(Object.keys(data));
-            }
-        }
+        const clientsRef = ref(database, "clients");
 
-        async function loadInvoices(clientName) {
-            const snapshot = await get(invoicesRef);
-            const invoicesList = document.getElementById('invoicesList');
-            invoicesList.innerHTML = '';
-
-            if (snapshot.exists()) {
-                const data = snapshot.val();
-                let total = 0;
-
-                Object.keys(data).forEach(key => {
-                    const invoice = data[key];
-                    if (invoice.clientName === clientName) {
-                        const div = document.createElement('div');
-                        div.innerHTML = `
-                            <strong>المبلغ:</strong> ${invoice.price} |
-                            <strong>التاريخ:</strong> ${invoice.date}<br>
-                            <strong>ملاحظة:</strong> ${invoice.note}<br>
-                            <strong>تاريخ الدفع:</strong> ${invoice.paymentDate || 'لم يتم الدفع بعد'}<br>
-                            <button onclick="togglePayment('${key}')">${invoice.status === 'paid' ? 'إلغاء الدفع' : 'دفع'}</button>
-                            <button onclick="deleteInvoice('${key}')">حذف</button>
-                            <button onclick="editNotePrompt('${key}')">تعديل الملاحظة</button>
-                        `;
-                        invoicesList.appendChild(div);
-                        if (invoice.status === 'unpaid') {
-                            total += parseFloat(invoice.price);
-                        }
-                    }
-                });
-
-                document.getElementById('totalAccount').textContent = total;
-            }
-        }
-
-        async function addClient() {
-            const clientName = document.getElementById('newClientName').value.trim();
-            if (clientName) {
+        // إضافة مشترك جديد
+        function addClient() {
+            const newClientName = document.getElementById("newClientName").value.trim();
+            if (newClientName) {
                 const newClientRef = push(clientsRef);
-                await set(newClientRef, { name: clientName });
-                document.getElementById('newClientName').value = '';
-                loadClients();
+                set(newClientRef, { name: newClientName });
+                document.getElementById("newClientName").value = "";
+            } else {
+                alert("يرجى إدخال اسم المشترك.");
             }
         }
 
-        async function deleteClient() {
-            const clientName = document.getElementById('clientSelect').value;
-            if (clientName) {
-                const clientSnapshot = await get(clientsRef);
-                if (clientSnapshot.exists()) {
-                    const data = clientSnapshot.val();
-                    const clientKey = Object.keys(data).find(key => data[key].name === clientName);
-                    if (clientKey) {
-                        await remove(child(clientsRef, clientKey));
-                        loadClients();
-                    }
-                }
+        // حذف مشترك
+        function deleteClient() {
+            const clientSelect = document.getElementById("clientSelect");
+            const selectedClientKey = clientSelect.value;
+            if (selectedClientKey) {
+                const clientRef = ref(database, `clients/${selectedClientKey}`);
+                remove(clientRef);
+            } else {
+                alert("يرجى اختيار مشترك لحذفه.");
+            }
+        }
 
-                const invoiceSnapshot = await get(invoicesRef);
-                if (invoiceSnapshot.exists()) {
-                    const data = invoiceSnapshot.val();
-                    Object.keys(data).forEach(async key => {
-                        if (data[key].clientName === clientName) {
-                            await remove(child(invoicesRef, key));
-                        }
+        // تحديث قائمة المشتركين
+        function updateClients() {
+            const clientSelect = document.getElementById("clientSelect");
+            const clientsList = document.getElementById("clientsList");
+            clientSelect.innerHTML = "";
+            clientsList.innerHTML = "";
+
+            onValue(clientsRef, (snapshot) => {
+                const clients = snapshot.val();
+                if (clients) {
+                    Object.keys(clients).forEach((key) => {
+                        const client = clients[key];
+                        const option = document.createElement("option");
+                        option.value = key;
+                        option.textContent = client.name;
+                        clientSelect.appendChild(option);
+
+                        const div = document.createElement("div");
+                        div.textContent = client.name;
+                        clientsList.appendChild(div);
                     });
                 }
-
-                document.getElementById('invoicesList').innerHTML = '';
-                document.getElementById('totalAccount').textContent = 0;
-            }
-        }
-
-        async function addInvoice() {
-            const clientName = document.getElementById('clientSelect').value;
-            const price = parseFloat(document.getElementById('subscriptionPrice').value);
-            const note = document.getElementById('invoiceNote').value.trim();
-
-            if (clientName && price) {
-                const newInvoiceRef = push(invoicesRef);
-                const invoice = {
-                    clientName,
-                    price,
-                    date: new Date().toLocaleString(),
-                    status: 'unpaid',
-                    note,
-                    paymentDate: null
-                };
-                await set(newInvoiceRef, invoice);
-                loadInvoices(clientName);
-                document.getElementById('subscriptionPrice').value = '';
-                document.getElementById('invoiceNote').value = '';
-            } else {
-                alert('يرجى إدخال البيانات المطلوبة.');
-            }
-        }
-
-        async function togglePayment(invoiceId) {
-            const invoiceRef = child(invoicesRef, invoiceId);
-            const snapshot = await get(invoiceRef);
-            if (snapshot.exists()) {
-                const invoice = snapshot.val();
-                invoice.status = invoice.status === 'paid' ? 'unpaid' : 'paid';
-                invoice.paymentDate = invoice.status === 'paid' ? new Date().toLocaleString() : null;
-                await update(invoiceRef, invoice);
-                loadInvoices(document.getElementById('clientSelect').value);
-            }
-        }
-
-        async function deleteInvoice(invoiceId) {
-            const invoiceRef = child(invoicesRef, invoiceId);
-            await remove(invoiceRef);
-            loadInvoices(document.getElementById('clientSelect').value);
-        }
-
-        async function editNotePrompt(invoiceId) {
-            const newNote = prompt("أدخل الملاحظة الجديدة:");
-            if (newNote !== null) {
-                const invoiceRef = child(invoicesRef, invoiceId);
-                await update(invoiceRef, { note: newNote });
-                loadInvoices(document.getElementById('clientSelect').value);
-            }
-        }
-
-        function updateClientSelect(clients) {
-            const clientSelect = document.getElementById('clientSelect');
-            clientSelect.innerHTML = '';
-            clients.forEach(client => {
-                const option = document.createElement('option');
-                option.value = client;
-                option.textContent = client;
-                clientSelect.appendChild(option);
             });
-            if (clients.length > 0) {
-                loadInvoices(clients[0]);
-            }
         }
 
-        window.onload = loadClients;
+        // تحديث البيانات عند تحميل الصفحة
+        updateClients();
     </script>
-</head>
-<body>
-    <div class="container">
-        <h2>Qإدارة المشتركين والفواتير</h2>
-
-        <label>إضافة مشترك جديد:</label>
-        <input type="text" id="newClientName" placeholder="اسم المشترك">
-        <button onclick="addClient()">إضافة مشترك</button>
-
-        <label>اختر المشترك:</label>
-        <select id="clientSelect" onchange="loadInvoices(this.value)"></select>
-        <button onclick="deleteClient()">حذف مشترك</button>
-
-        <label>سعر الاشتراك:</label>
-        <input type="number" id="subscriptionPrice" placeholder="السعر">
-
-        <label>ملاحظة:</label>
-        <textarea id="invoiceNote"></textarea>
-
-        <button onclick="addInvoice()">إضافة فاتورة</button>
-
-        <h3>الفواتير:</h3>
-        <div id="invoicesList"></div>
-
-        <h3>الحساب الكلي:</h3>
-        <div id="totalAccount">0</div>
-    </div>
 </body>
 </html>
