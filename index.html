@@ -1,136 +1,66 @@
-<!DOCTYPE html>
-<html lang="ar">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>تطبيق المشتركين</title>
-    <style>
-        body {
-            font-family: 'Cairo', sans-serif;
-            direction: rtl;
-            text-align: right;
-            background-color: #f9f9f9;
-            padding: 20px;
+<script type="module">
+    // استيراد Firebase SDK
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/11.1.0/firebase-app.js";
+    import { getDatabase, ref, push, set, onValue } from "https://www.gstatic.com/firebasejs/11.1.0/firebase-database.js";
+
+    // إعداد Firebase
+    const firebaseConfig = {
+        apiKey: "AIzaSyBLozqHT0vU9_E9nX5SMHeK80akAwYcP5w",
+        authDomain: "resiller-a9868.firebaseapp.com",
+        databaseURL: "https://resiller-a9868-default-rtdb.firebaseio.com",
+        projectId: "resiller-a9868",
+        storageBucket: "resiller-a9868.appspot.com",
+        messagingSenderId: "984544326620",
+        appId: "1:984544326620:web:87a481597de65a61bb5519"
+    };
+
+    const app = initializeApp(firebaseConfig);
+    const database = getDatabase(app);
+
+    const clientsRef = ref(database, "clients");
+
+    // إضافة مشترك َثر جديد
+    function addClient() {
+        const newClientName = document.getElementById("newClientName").value.trim();
+        if (newClientName) {
+            const newClientRef = push(clientsRef);
+            set(newClientRef, { name: newClientName })
+                .then(() => {
+                    alert("تمت إضافة المشترك بنجاح.");
+                    document.getElementById("newClientName").value = "";
+                })
+                .catch((error) => {
+                    console.error("خطأ أثناء إضافة المشترك:", error);
+                    alert("حدث خطأ أثناء إضافة المشترك. تحقق من إعدادات Firebase.");
+                });
+        } else {
+            alert("يرجى إدخال اسم المشترك.");
         }
+    }
 
-        .container {
-            width: 850px;
-            margin: auto;
-            background-color: #fff;
-            padding: 25px;
-            border-radius: 10px;
-            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
-        }
+    // تحديث قائمة المشتركين
+    function updateClients() {
+        const clientSelect = document.getElementById("clientSelect");
+        clientSelect.innerHTML = "";
 
-        input, button, select, textarea {
-            margin: 10px 0;
-            padding: 12px;
-            width: 100%;
-            border: 1px solid #ccc;
-            border-radius: 5px;
-            font-size: 14px;
-        }
-
-        button {
-            background-color: #28a745;
-            color: white;
-            border: none;
-            cursor: pointer;
-        }
-
-        button:hover {
-            background-color: #218838;
-        }
-    </style>
-</head>
-<body>
-    <div class="container">
-        <h2>إدارة المشتركين والفواتير</h2>
-
-        <label>إضافة مشترك جديد:</label>
-        <input type="text" id="newClientName" placeholder="اسم المشترك">
-        <button onclick="addClient()">إضافة مشترك</button>
-
-        <label>اختر المشترك:</label>
-        <select id="clientSelect"></select>
-        <button onclick="deleteClient()">حذف مشترك</button>
-
-        <h3>المشتركين:</h3>
-        <div id="clientsList"></div>
-    </div>
-
-    <script type="module">
-        // استيراد Firebase SDK
-        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.1.0/firebase-app.js";
-        import { getDatabase, ref, push, set, onValue, remove } from "https://www.gstatic.com/firebasejs/11.1.0/firebase-database.js";
-
-        // إعداد Firebase
-        const firebaseConfig = {
-            apiKey: "AIzaSyBLozqHT0vU9_E9nX5SMHeK80akAwYcP5w",
-            authDomain: "resiller-a9868.firebaseapp.com",
-            databaseURL: "https://resiller-a9868-default-rtdb.firebaseio.com",
-            projectId: "resiller-a9868",
-            storageBucket: "resiller-a9868.appspot.com",
-            messagingSenderId: "984544326620",
-            appId: "1:984544326620:web:87a481597de65a61bb5519"
-        };
-
-        const app = initializeApp(firebaseConfig);
-        const database = getDatabase(app);
-
-        const clientsRef = ref(database, "clients");
-
-        // إضافة مشترك جديد
-        function addClient() {
-            const newClientName = document.getElementById("newClientName").value.trim();
-            if (newClientName) {
-                const newClientRef = push(clientsRef);
-                set(newClientRef, { name: newClientName });
-                document.getElementById("newClientName").value = "";
+        onValue(clientsRef, (snapshot) => {
+            const clients = snapshot.val();
+            if (clients) {
+                Object.keys(clients).forEach((key) => {
+                    const client = clients[key];
+                    const option = document.createElement("option");
+                    option.value = key;
+                    option.textContent = client.name;
+                    clientSelect.appendChild(option);
+                });
             } else {
-                alert("يرجى إدخال اسم المشترك.");
+                console.log("لا يوجد مشتركين حاليًا.");
             }
-        }
+        }, (error) => {
+            console.error("خطأ أثناء قراءة البيانات:", error);
+        });
+    }
 
-        // حذف مشترك
-        function deleteClient() {
-            const clientSelect = document.getElementById("clientSelect");
-            const selectedClientKey = clientSelect.value;
-            if (selectedClientKey) {
-                const clientRef = ref(database, `clients/${selectedClientKey}`);
-                remove(clientRef);
-            } else {
-                alert("يرجى اختيار مشترك لحذفه.");
-            }
-        }
-
-        // تحديث قائمة المشتركين
-        function updateClients() {
-            const clientSelect = document.getElementById("clientSelect");
-            const clientsList = document.getElementById("clientsList");
-            clientSelect.innerHTML = "";
-            clientsList.innerHTML = "";
-
-            onValue(clientsRef, (snapshot) => {
-                const clients = snapshot.val();
-                if (clients) {
-                    Object.keys(clients).forEach((key) => {
-                        const client = clients[key];
-                        const option = document.createElement("option");
-                        option.value = key;
-                        option.textContent = client.name;
-                        clientSelect.appendChild(option);
-
-                        const div = document.createElement("div");
-                        div.textContent = client.name;
-                        clientsList.appendChild(div);
-                    });
-                }
-            });
-        }
-
-        // تحديث البيانات عند تحميل الصفحة
-        updateClients();
-    </script>
-</body>
-</html>
+    // تحديث البيانات عند تحميل الصفحة
+    updateClients();
+</script>
