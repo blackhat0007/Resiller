@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>تطبيق المشتركين</title>
+    <title>إدارة المشتركين والفواتير</title>
     <style>
         body {
             font-family: 'Cairo', sans-serif;
@@ -42,35 +42,182 @@
             background-color: #218838;
         }
     </style>
-    <!-- Firebase -->
     <script type="module">
-        // Import the functions you need from the SDKs you need
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.1.0/firebase-app.js";
+        import { getDatabase, ref, set, push, get, child, update, remove } from "https://www.gstatic.com/firebasejs/11.1.0/firebase-database.js";
 
-        // Your web app's Firebase configuration
         const firebaseConfig = {
             apiKey: "AIzaSyBLozqHT0vU9_E9nX5SMHeK80akAwYcP5w",
             authDomain: "resiller-a9868.firebaseapp.com",
+            databaseURL: "https://resiller-a9868-default-rtdb.firebaseio.com/",
             projectId: "resiller-a9868",
             storageBucket: "resiller-a9868.appspot.com",
             messagingSenderId: "984544326620",
             appId: "1:984544326620:web:87a481597de65a61bb5519"
         };
 
-        // Initialize Firebase
         const app = initializeApp(firebaseConfig);
+        const db = getDatabase(app);
+        const clientsRef = ref(db, 'clients');
+        const invoicesRef = ref(db, 'invoices');
+
+        async function loadClients() {
+            const snapshot = await get(clientsRef);
+            if (snapshot.exists()) {
+                const data = snapshot.val();
+                updateClientSelect(Object.keys(data));
+            }
+        }
+
+        async function loadInvoices(clientName) {
+            const snapshot = await get(invoicesRef);
+            const invoicesList = document.getElementById('invoicesList');
+            invoicesList.innerHTML = '';
+
+            if (snapshot.exists()) {
+                const data = snapshot.val();
+                let total = 0;
+
+                Object.keys(data).forEach(key => {
+                    const invoice = data[key];
+                    if (invoice.clientName === clientName) {
+                        const div = document.createElement('div');
+                        div.innerHTML = `
+                            <strong>المبلغ:</strong> ${invoice.price} |
+                            <strong>التاريخ:</strong> ${invoice.date}<br>
+                            <strong>ملاحظة:</strong> ${invoice.note}<br>
+                            <strong>تاريخ الدفع:</strong> ${invoice.paymentDate || 'لم يتم الدفع بعد'}<br>
+                            <button onclick="togglePayment('${key}')">${invoice.status === 'paid' ? 'إلغاء الدفع' : 'دفع'}</button>
+                            <button onclick="deleteInvoice('${key}')">حذف</button>
+                            <button onclick="editNotePrompt('${key}')">تعديل الملاحظة</button>
+                        `;
+                        invoicesList.appendChild(div);
+                        if (invoice.status === 'unpaid') {
+                            total += parseFloat(invoice.price);
+                        }
+                    }
+                });
+
+                document.getElementById('totalAccount').textContent = total;
+            }
+        }
+
+        async function addClient() {
+            const clientName = document.getElementById('newClientName').value.trim();
+            if (clientName) {
+                const newClientRef = push(clientsRef);
+                await set(newClientRef, { name: clientName });
+                document.getElementById('newClientName').value = '';
+                loadClients();
+            }
+        }
+
+        async function deleteClient() {
+            const clientName = document.getElementById('clientSelect').value;
+            if (clientName) {
+                const clientSnapshot = await get(clientsRef);
+                if (clientSnapshot.exists()) {
+                    const data = clientSnapshot.val();
+                    const clientKey = Object.keys(data).find(key => data[key].name === clientName);
+                    if (clientKey) {
+                        await remove(child(clientsRef, clientKey));
+                        loadClients();
+                    }
+                }
+
+                const invoiceSnapshot = await get(invoicesRef);
+                if (invoiceSnapshot.exists()) {
+                    const data = invoiceSnapshot.val();
+                    Object.keys(data).forEach(async key => {
+                        if (data[key].clientName === clientName) {
+                            await remove(child(invoicesRef, key));
+                        }
+                    });
+                }
+
+                document.getElementById('invoicesList').innerHTML = '';
+                document.getElementById('totalAccount').textContent = 0;
+            }
+        }
+
+        async function addInvoice() {
+            const clientName = document.getElementById('clientSelect').value;
+            const price = parseFloat(document.getElementById('subscriptionPrice').value);
+            const note = document.getElementById('invoiceNote').value.trim();
+
+            if (clientName && price) {
+                const newInvoiceRef = push(invoicesRef);
+                const invoice = {
+                    clientName,
+                    price,
+                    date: new Date().toLocaleString(),
+                    status: 'unpaid',
+                    note,
+                    paymentDate: null
+                };
+                await set(newInvoiceRef, invoice);
+                loadInvoices(clientName);
+                document.getElementById('subscriptionPrice').value = '';
+                document.getElementById('invoiceNote').value = '';
+            } else {
+                alert('يرجى إدخال البيانات المطلوبة.');
+            }
+        }
+
+        async function togglePayment(invoiceId) {
+            const invoiceRef = child(invoicesRef, invoiceId);
+            const snapshot = await get(invoiceRef);
+            if (snapshot.exists()) {
+                const invoice = snapshot.val();
+                invoice.status = invoice.status === 'paid' ? 'unpaid' : 'paid';
+                invoice.paymentDate = invoice.status === 'paid' ? new Date().toLocaleString() : null;
+                await update(invoiceRef, invoice);
+                loadInvoices(document.getElementById('clientSelect').value);
+            }
+        }
+
+        async function deleteInvoice(invoiceId) {
+            const invoiceRef = child(invoicesRef, invoiceId);
+            await remove(invoiceRef);
+            loadInvoices(document.getElementById('clientSelect').value);
+        }
+
+        async function editNotePrompt(invoiceId) {
+            const newNote = prompt("أدخل الملاحظة الجديدة:");
+            if (newNote !== null) {
+                const invoiceRef = child(invoicesRef, invoiceId);
+                await update(invoiceRef, { note: newNote });
+                loadInvoices(document.getElementById('clientSelect').value);
+            }
+        }
+
+        function updateClientSelect(clients) {
+            const clientSelect = document.getElementById('clientSelect');
+            clientSelect.innerHTML = '';
+            clients.forEach(client => {
+                const option = document.createElement('option');
+                option.value = client;
+                option.textContent = client;
+                clientSelect.appendChild(option);
+            });
+            if (clients.length > 0) {
+                loadInvoices(clients[0]);
+            }
+        }
+
+        window.onload = loadClients;
     </script>
 </head>
-<body onload="loadData()">
+<body>
     <div class="container">
-        <h2>إدارة المشتركين والفواتير</h2>
+        <h2>Qإدارة المشتركين والفواتير</h2>
 
         <label>إضافة مشترك جديد:</label>
         <input type="text" id="newClientName" placeholder="اسم المشترك">
         <button onclick="addClient()">إضافة مشترك</button>
 
         <label>اختر المشترك:</label>
-        <select id="clientSelect" onchange="updateInvoices()"></select>
+        <select id="clientSelect" onchange="loadInvoices(this.value)"></select>
         <button onclick="deleteClient()">حذف مشترك</button>
 
         <label>سعر الاشتراك:</label>
@@ -87,158 +234,5 @@
         <h3>الحساب الكلي:</h3>
         <div id="totalAccount">0</div>
     </div>
-
-    <script>
-        const dbFileName = 'data.json';
-
-        // تحميل البيانات من ملف JSON
-        async function loadData() {
-            try {
-                const response = await fetch(dbFileName);
-                if (response.ok) {
-                    const data = await response.json();
-                    clientsDB = data.clients || [];
-                    invoicesDB = data.invoices || [];
-                    updateClientSelect();
-                    updateInvoices();
-                }
-            } catch (error) {
-                console.error('خطأ في تحميل البيانات:', error);
-            }
-        }
-
-        // حفظ البيانات في ملف JSON
-        async function saveData() {
-            const data = { clients: clientsDB, invoices: invoicesDB };
-            try {
-                await fetch(dbFileName, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(data),
-                });
-                console.log('تم حفظ البيانات بنجاح.');
-            } catch (error) {
-                console.error('خطأ في حفظ البيانات:', error);
-            }
-        }
-
-        let clientsDB = [];
-        let invoicesDB = [];
-
-        function addClient() {
-            const newClientName = document.getElementById('newClientName').value.trim();
-            if (newClientName && !clientsDB.includes(newClientName)) {
-                clientsDB.push(newClientName);
-                updateClientSelect();
-                saveData();
-                document.getElementById('newClientName').value = '';
-            }
-        }
-
-        function deleteClient() {
-            const clientName = document.getElementById('clientSelect').value;
-            if (clientName) {
-                clientsDB = clientsDB.filter(client => client !== clientName);
-                invoicesDB = invoicesDB.filter(invoice => invoice.clientName !== clientName);
-                updateClientSelect();
-                updateInvoices();
-                saveData();
-            }
-        }
-
-        function updateClientSelect() {
-            const clientSelect = document.getElementById('clientSelect');
-            clientSelect.innerHTML = '';
-            clientsDB.forEach(client => {
-                const option = document.createElement('option');
-                option.value = client;
-                option.textContent = client;
-                clientSelect.appendChild(option);
-            });
-        }
-
-        function addInvoice() {
-            const clientName = document.getElementById('clientSelect').value;
-            const subscriptionPrice = parseFloat(document.getElementById('subscriptionPrice').value);
-            const note = document.getElementById('invoiceNote').value.trim();
-            const date = new Date().toLocaleString();
-
-            if (clientName && subscriptionPrice) {
-                const invoice = {
-                    id: Date.now(),
-                    clientName,
-                    price: subscriptionPrice,
-                    date,
-                    status: 'unpaid',
-                    note,
-                    paymentDate: null,
-                };
-                invoicesDB.push(invoice);
-                updateInvoices();
-                saveData();
-            } else {
-                alert('يرجى اختيار المشترك وإدخال سعر الاشتراك');
-            }
-        }
-
-        function updateInvoices() {
-            const selectedClient = document.getElementById('clientSelect').value;
-            const invoicesList = document.getElementById('invoicesList');
-            invoicesList.innerHTML = '';
-            invoicesDB.filter(invoice => invoice.clientName === selectedClient).forEach(invoice => {
-                const div = document.createElement('div');
-                div.className = 'invoice';
-                div.innerHTML = `
-                    <strong>المبلغ:</strong> ${invoice.price} |
-                    <strong>التاريخ:</strong> ${invoice.date}<br>
-                    <strong>ملاحظة:</strong> ${invoice.note}<br>
-                    <strong>تاريخ الدفع:</strong> ${invoice.paymentDate || 'لم يتم الدفع بعد'}<br>
-                    <button onclick="togglePayment(${invoice.id})">${invoice.status === 'paid' ? 'إلغاء الدفع' : 'دفع'}</button>
-                    <button onclick="deleteInvoice(${invoice.id})">حذف</button>
-                    <button onclick="editNote(${invoice.id})">تعديل الملاحظة</button>
-                `;
-                invoicesList.appendChild(div);
-            });
-            updateTotalAccount();
-        }
-
-        function togglePayment(id) {
-            invoicesDB.forEach(invoice => {
-                if (invoice.id === id) {
-                    invoice.status = invoice.status === 'paid' ? 'unpaid' : 'paid';
-                    invoice.paymentDate = invoice.status === 'paid' ? new Date().toLocaleString() : null;
-                }
-            });
-            updateInvoices();
-            saveData();
-        }
-
-        function deleteInvoice(id) {
-            invoicesDB = invoicesDB.filter(invoice => invoice.id !== id);
-            updateInvoices();
-            saveData();
-        }
-
-        function editNote(id) {
-            const newNote = prompt("أدخل الملاحظة الجديدة:");
-            if (newNote !== null) {
-                invoicesDB.forEach(invoice => {
-                    if (invoice.id === id) {
-                        invoice.note = newNote;
-                    }
-                });
-                updateInvoices();
-                saveData();
-            }
-        }
-
-        function updateTotalAccount() {
-            const selectedClient = document.getElementById('clientSelect').value;
-            const total = invoicesDB
-                .filter(invoice => invoice.clientName === selectedClient && invoice.status === 'unpaid')
-                .reduce((sum, invoice) => sum + invoice.price, 0);
-            document.getElementById('totalAccount').textContent = total;
-        }
-    </script>
 </body>
 </html>
